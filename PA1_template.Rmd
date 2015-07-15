@@ -1,25 +1,240 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Project1"
+author: "SNB"
+date: "Saturday, July 11, 2015"
+output: html_document
 ---
+=================================================================================
+
+Calling the required libraries:
+
+=================================================================================
+
+```{r}
+library(ggplot2)
+library(lattice)
+library(dplyr)
+par(mfrow=c(1,1))
+```
+================================================================================
+
+Reading the Activity data:
+
+#Loading and preprocessing the data
+
+=================================================================================
+
+```{r}
+activity <- read.csv("activity.csv",stringsAsFactors=F)
+activity[,2]<-as.Date(activity[,2])
+head(activity)
+summary(activity)
+```
+===as==============================================================================
+
+Removing the incomplete day data and summarising the total, average and median:
+
+#What is mean total number of steps taken per day?
+
+=================================================================================
+
+```{r}
+measured <- activity[complete.cases(activity),]
+measured <- group_by(measured,date)%>%
+summarize(day_sum=sum(steps), day_mean=mean(steps), day_median=median(steps))
+head(measured)
+summary(measured)
+```
+=================================================================================
+
+Ploting the frequences of the steps,and the daily average over the two months:
+
+=================================================================================
+```{r}
+
+hist(measured$day_sum, main="Total steps per day", xlab="steps per day")
+measured[,c(1,3,4)]
+qp<-qplot(date,day_mean, data=measured, main="Daily average number of steps (Median in red)-raw data", ylab="daily average", xlab="Each day of October and November in 2012")
+qpMeasured <- qp+geom_hline(aes(yintercept=0,col="red"))
+qpMeasured
+
+```
+
+=================================================================================
+
+Average daily activity pattern plotted:
+
+#What is the average daily activity pattern?
+
+=================================================================================
+```{r}
+existing <- activity[complete.cases(activity),]
+timemean <-group_by(existing, interval)%>%
+           summarize(time_sum=sum(steps), time_mean=mean(steps))
+head(timemean)
+summary(timemean)
+with(timemean, qplot(interval,time_mean, xlab="Interval (minutes)", ylab="average no. of steps",
+main="Average daily actvity pattern ", geom="line"))
+
+```
+#MAXIMUM DAY TIME AVERAGE ACTIVTY: 
+```{r}
+maxmean <- max(timemean$time_mean)
+cat("The maximum average day time activity = ",maxmean,".")
+peaktime <- filter(timemean, time_mean==maxmean)
+peakhour <- peaktime$interval
+cat("It occurs at the ", peakhour," minute interval, that is, at ",as.integer(peakhour/60)," hours, ",peakhour%%60," minutes.")
+```
 
 
-## Loading and preprocessing the data
+=================================================================================
+
+Modelling the missing obsevations:
+
+#Imputing missing values
+
+=================================================================================
+
+CALCULATING THE NUMBER OF MISSING OBSERVATIONS
+
+```{r}
+lact <- length(activity$steps)
+no_missing <- lact-length(existing$steps)
+cat("The number of missing recordings is ",no_missing,", that is, ",as.integer(no_missing/lact*100),"%.")
+```
+
+REPLACING the MISSING RECORDINGS with the MEAN OF THE DAILY TIME INTERVAL READING:
+
+```{r}
+estimates <- activity
+for (i in 1:lact) {
+    if (is.na(estimates[i,1])) {
+        filt <- filter(timemean,interval==estimates[i,3])
+        estimates[i,1] <- filt[1,3]
+    }
+}   
+head(estimates)
+summary(estimates)
+
+```
+=================================================================================
+
+Comparison of statistics tables with and without missing observations
+
+=================================================================================
+
+```{r}
+
+completed <- group_by(estimates,date)%>%
+summarize(day_sum=sum(steps), day_mean=mean(steps), day_median=median(steps))
+head(completed)
+summary(completed)
+
+timemeanExtended <-group_by(estimates, interval)%>%
+           summarize(time_sum=sum(steps), time_mean=mean(steps))
+head(timemeanExtended)
+summary(timemeanExtended)
+```
+MAXIMUM DAILY AVERAGE ACTIVITY:
+
+```{r}
+maxmean <- max(timemeanExtended$time_mean)
+cat("The maximum daily average number of steps = ", maxmean,".")
+peaktime <- filter(timemeanExtended, time_mean==maxmean)
+peakhour <- peaktime$interval
+cat("It occurs at the ",peakhour, " minutes interval, that is, at ",as.integer(peakhour/60)," hours ",peakhour%%60," minutes.")
+```
+Comparative plots
+
+```{r}
+par(mfrow=c(1,2))
+hist(measured$day_sum, main="Total steps per day - raw data", xlab="steps per day")
+hist(completed$day_sum, main="Total steps per day - adjusted data", xlab="steps per day")
+par(mfrow=c(1,1))
+
+```
+
+```{r}
+par(mfrow=c(1,2))
+plot(measured$date, measured$day_mean,col="blue",main="Daily average - raw data", pch=19)
+points(measured$date, measured$day_median, col="red", pch=19)
+legend("topright", pch=c(17,8),col=c("blue","red"),legend=c("Mean", "Median"))
+
+plot(completed$date, completed$day_mean,col="blue",main="Daily average - adjusted data", pch=19)
+points(completed$date, completed$day_median, col="red", pch=19)
+legend("topright", pch=c(17,8),col=c("blue","red"),legend=c("Mean", "Median"))
+
+par(mfrow=c(1,1))
+```
+
+```{r}
+par(mfrow=c(1,2))
+plot(timemean$interval, timemean$time_mean,main="Average daily activity - raw data ", lty=1)
+plot(timemeanExtended$interval, timemeanExtended$time_mean,main="Average daily activity - adjusted data ", lty=1)
+par(mfrow=c(1,1))
+```
+
+CONCLUSION
+
+The comparison between the raw and the adjusted data reflects the choice of the daily mean as the extrapolation, since the frequencies of the daily means are naturally increased, the median values shifted slightly, while the means themselves show very slight variation. 
+Were the proportion of omitted values higher than the approximately 13%, then more markant effects might be shown.
+
+=================================================================================
+
+Separating the patterns of the weekday and weekend data:
+
+Are there differences in activity patterns between weekdays and weekends?
+
+=================================================================================
 
 
 
-## What is mean total number of steps taken per day?
+```{r}
+    DayTypeEstimates <-estimates
+    for (i in 1:lact) {
+        y <- as.POSIXlt(estimates[i,2])
+        z <- y$wday
+        if (z == 6 | z== 7) {
+            DayTypeEstimates[i,4] <- "WEEKEND"
+            }
+            else {
+            DayTypeEstimates[i,4] <- "WEEKDAY"
+            }
+        }
+    names(DayTypeEstimates) <- c(names(estimates), "day_type")
+    DayTypeEstimates[,4] <- as.factor(DayTypeEstimates[,4])
+    str(DayTypeEstimates)
+ ```
+TIME SERIES PLOTS comparing WEEKDAY and WEEKEND Activity
+ 
+Grouping means by Weekday and Weekend
+
+```{r}
+WeekDay <- filter(DayTypeEstimates, day_type=="WEEKDAY")
+WeekDayMeans <- group_by(WeekDay, interval)%>%
+                summarize(time_sum=sum(steps), time_mean=mean(steps))
+        noWD <- length(WeekDayMeans$interval)
+        WeekDayMeans[,4] <-c(rep("WEEKDAY",noWD))
+WeekEnd <- filter(DayTypeEstimates, day_type=="WEEKEND")
+WeekEndMeans <- group_by(WeekEnd, interval)%>%
+                summarize(time_sum=sum(steps), time_mean=mean(steps))
+        noWE <- length(WeekEndMeans$interval)
+        WeekEndMeans[,4] <-c(rep("WEEKEND",noWE))
+    DayType <- rbind(WeekDayMeans, WeekEndMeans)
+    names(DayType) <- c(names(timemean), "day_type")
+    DayType$day_type <-as.factor(DayType$day_type)
+    str(DayType)
+
+ xyplot(time_mean~interval | day_type, 
+        data=DayType,layout=c(1,2),type="l",lwd=1,lty=1)
+        
+```
 
 
 
-## What is the average daily activity pattern?
+CONCLUSION:
 
-
-
-## Imputing missing values
-
-
-
-## Are there differences in activity patterns between weekdays and weekends?
+The general pattern for both weekdays and weekends is that the activity 
+increases to a maximum at lunch time, and continues to be moderate in the afternoon until evening.
+As to be expected the maximum is higher in the weekend, as is the afternoon activity, 
+but it starts later in the morning than during the week.
